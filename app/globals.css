@@ -193,6 +193,12 @@ li {
   width: 100%;
 }
 
+.verified-checkmark {
+  color: #1da1f2; /* Twitter blue color */
+  font-size: 1.2em;
+  margin-left: 5px;
+}
+
 /* SWIPER JS */
 .custom_swiper_list_item>* {
 
