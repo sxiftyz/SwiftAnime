@@ -4,7 +4,7 @@ import styles from "./component.module.css";
 import {
     getFirestore, doc, setDoc,
     DocumentData, QueryDocumentSnapshot, collection, getDocs,
-    where, query,
+    getDoc, where, query,
 } from 'firebase/firestore';
 import { initFirebase } from '@/app/firebaseApp';
 import { getAuth } from 'firebase/auth';
@@ -27,7 +27,7 @@ type CommentsSectionTypes = {
 }
 
 export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, episodeNumber }: CommentsSectionTypes) {
-    const [commentsList, setCommentsList] = useState<DocumentData[]>([]);
+    const [commentsList, setCommentsList] = useState<UserComment[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [commentsSliceRange, setCommentsSliceRange] = useState<number>(3);
 
@@ -37,15 +37,19 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
     const [user] = useAuthState(auth);
     const db = getFirestore(initFirebase());
 
-    useEffect(() => { getCommentsForCurrMedia(); }, [mediaInfo, user, anilistUser, episodeId]);
+    useEffect(() => { 
+        getCommentsForCurrMedia(); 
+    }, [mediaInfo, user, anilistUser, episodeId]);
 
-    function handleCommentsSliceRange() { setCommentsSliceRange(commentsSliceRange + 10); }
+    function handleCommentsSliceRange() { 
+        setCommentsSliceRange(commentsSliceRange + 10); 
+    }
 
-    async function handleCommentsSortBy(sortBy: "date" | "likes" | "dislikes", commentsUnsorted?: DocumentData[]) {
+    async function handleCommentsSortBy(sortBy: "date" | "likes" | "dislikes", commentsUnsorted?: UserComment[]) {
         setIsLoading(true);
         if (!commentsUnsorted) commentsUnsorted = await getCommentsForCurrMedia();
 
-        let sortedComments;
+        let sortedComments: UserComment[];
 
         switch (sortBy) {
             case "date":
@@ -67,41 +71,41 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
     }
 
     async function getCommentsForCurrMedia() {
-    setIsLoading(true);
+        setIsLoading(true);
 
-    let mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
+        let mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
 
-    if (!mediaComments) {
-        await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
-        mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
-        return;
+        if (mediaCommentsSnapshot.empty) {
+            await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
+            mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
+        }
+
+        if (isOnWatchPage) {
+            const commentsForCurrEpisode: UserComment[] = [];
+            const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
+            const querySnapshot = await getDocs(queryCommentsToThisEpisode);
+            querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push({ ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
+            await handleCommentsSortBy("date", commentsForCurrEpisode);
+            setIsLoading(false);
+            return commentsForCurrEpisode;
+        }
+
+        const mediaCommentsMapped = await Promise.all(mediaCommentsSnapshot.docs.map(async (doc: QueryDocumentSnapshot<DocumentData>) => {
+            const commentData = doc.data();
+            const userDocRef = doc(db, 'users', commentData.userId); // Create a reference to the user document
+            const userDoc = await getDoc(userDocRef); // Fetch the user document
+            const userData = userDoc.data(); // Access the document data
+            return {
+                ...commentData,
+                userData,
+                createdAt: commentData.createdAt.toDate() // Assuming createdAt is a Timestamp
+            };
+        }));
+
+        await handleCommentsSortBy("date", mediaCommentsMapped as UserComment[]);
+        setIsLoading(false);
+        return mediaCommentsMapped as UserComment[];
     }
-
-    if (isOnWatchPage) {
-        let commentsForCurrEpisode: DocumentData[] = [];
-        const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
-        const querySnapshot = await getDocs(queryCommentsToThisEpisode);
-        querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push(doc.data()));
-        await handleCommentsSortBy("date", commentsForCurrEpisode);
-        return;
-    }
-
-    const mediaCommentsMapped = await Promise.all(mediaComments.docs.map(async (doc: QueryDocumentSnapshot) => {
-        const commentData = doc.data();
-        const userDocRef = doc(db, 'users', commentData.userId); // Create a reference to the user document
-        const userDoc = await getDoc(userDocRef); // Fetch the user document
-        const userData = userDoc.data(); // Access the document data
-        return {
-            ...commentData,
-            userData
-        };
-    }));
-
-    await handleCommentsSortBy("date", mediaCommentsMapped);
-    setIsLoading(false);
-    return mediaCommentsMapped;
-}
-
 
     return (
         <div id={styles.container}>
@@ -140,8 +144,8 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
                             {!isLoading && (
                                 commentsList.slice(0, commentsSliceRange).map((comment) => (
                                     <CommentContainer
-                                        key={comment.createdAt}
-                                        comment={comment as UserComment}
+                                        key={comment.createdAt.toISOString()}
+                                        comment={comment}
                                         mediaId={mediaInfo.id}
                                         isLoadingHook={isLoading}
                                         loadComments={getCommentsForCurrMedia}
@@ -167,7 +171,7 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
                         <SvgLoading width={120} height={120} alt="Loading" />
                     </div>
                 )}
-                {(commentsList.length == 0 && !isLoading) && (
+                {(commentsList.length === 0 && !isLoading) && (
                     <div id={styles.no_comments_container}>
                         <p>No Comments Yet</p>
                     </div>
