@@ -67,41 +67,41 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
     }
 
     async function getCommentsForCurrMedia() {
-        setIsLoading(true);
+    setIsLoading(true);
 
-        let mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
+    let mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
 
-        if (!mediaComments) {
-            await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
-            mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
-            return;
-        }
-
-        if (isOnWatchPage) {
-            let commentsForCurrEpisode: DocumentData[] = [];
-            const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
-            const querySnapshot = await getDocs(queryCommentsToThisEpisode);
-            querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push(doc.data()));
-            await handleCommentsSortBy("date", commentsForCurrEpisode);
-            return;
-        }
-
-        const mediaCommentsMapped = mediaComments.docs.map(async (doc: QueryDocumentSnapshot) => {
-            const commentData = doc.data();
-            const userDoc = await getDoc(doc(db, 'users', commentData.userId)); // Fetch user data // Fetch user data
-            const userData = userDoc.docs[0].data();
-            return {
-                ...commentData,
-                userVerified: userData.verified // Add verified status to comment data
-            };
-        });
-
-        const resolvedComments = await Promise.all(mediaCommentsMapped);
-
-        await handleCommentsSortBy("date", resolvedComments);
-        setIsLoading(false);
-        return resolvedComments;
+    if (!mediaComments) {
+        await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
+        mediaComments = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
+        return;
     }
+
+    if (isOnWatchPage) {
+        let commentsForCurrEpisode: DocumentData[] = [];
+        const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
+        const querySnapshot = await getDocs(queryCommentsToThisEpisode);
+        querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push(doc.data()));
+        await handleCommentsSortBy("date", commentsForCurrEpisode);
+        return;
+    }
+
+    const mediaCommentsMapped = await Promise.all(mediaComments.docs.map(async (doc: QueryDocumentSnapshot) => {
+        const commentData = doc.data();
+        const userDocRef = doc(db, 'users', commentData.userId); // Create a reference to the user document
+        const userDoc = await getDoc(userDocRef); // Fetch the user document
+        const userData = userDoc.data(); // Access the document data
+        return {
+            ...commentData,
+            userData
+        };
+    }));
+
+    await handleCommentsSortBy("date", mediaCommentsMapped);
+    setIsLoading(false);
+    return mediaCommentsMapped;
+}
+
 
     return (
         <div id={styles.container}>
