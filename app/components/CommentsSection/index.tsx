@@ -71,41 +71,42 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
     }
 
     async function getCommentsForCurrMedia() {
-        setIsLoading(true);
+    setIsLoading(true);
 
-        let mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
+    let mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
 
-        if (mediaCommentsSnapshot.empty) {
-            await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
-            mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
-        }
-
-        if (isOnWatchPage) {
-            const commentsForCurrEpisode: UserComment[] = [];
-            const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
-            const querySnapshot = await getDocs(queryCommentsToThisEpisode);
-            querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push({ ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
-            await handleCommentsSortBy("date", commentsForCurrEpisode);
-            setIsLoading(false);
-            return commentsForCurrEpisode;
-        }
-
-        const mediaCommentsMapped = await Promise.all(mediaCommentsSnapshot.docs.map(async (doc: QueryDocumentSnapshot<DocumentData>) => {
-            const commentData = doc.data();
-            const userDocRef = doc(db, 'users', commentData.userId); // Create a reference to the user document
-            const userDoc = await getDoc(userDocRef); // Fetch the user document
-            const userData = userDoc.data(); // Access the document data
-            return {
-                ...commentData,
-                userData,
-                createdAt: commentData.createdAt.toDate() // Assuming createdAt is a Timestamp
-            };
-        }));
-
-        await handleCommentsSortBy("date", mediaCommentsMapped as UserComment[]);
-        setIsLoading(false);
-        return mediaCommentsMapped as UserComment[];
+    if (mediaCommentsSnapshot.empty) {
+        await setDoc(doc(db, 'comments', `${mediaInfo.id}`), {});
+        mediaCommentsSnapshot = await getDocs(collection(db, 'comments', `${mediaInfo.id}`, isOnWatchPage ? `${episodeId}` : "all"));
     }
+
+    if (isOnWatchPage) {
+        const commentsForCurrEpisode: UserComment[] = [];
+        const queryCommentsToThisEpisode = query(collection(db, 'comments', `${mediaInfo.id}`, "all"), where("episodeNumber", "==", episodeNumber));
+        const querySnapshot = await getDocs(queryCommentsToThisEpisode);
+        querySnapshot.docs.forEach(doc => commentsForCurrEpisode.push({ ...doc.data(), createdAt: doc.data().createdAt.toDate() }));
+        await handleCommentsSortBy("date", commentsForCurrEpisode);
+        setIsLoading(false);
+        return commentsForCurrEpisode;
+    }
+
+    const mediaCommentsMapped = await Promise.all(mediaCommentsSnapshot.docs.map(async (doc: QueryDocumentSnapshot<DocumentData>) => {
+        const commentData = doc.data();
+        const userDocRef = doc(db, 'users', commentData.userId); // Create a reference to the user document
+        const userDoc = await getDoc(userDocRef); // Fetch the user document
+        const userData = userDoc.data(); // Access the document data
+        return {
+            ...commentData,
+            userData,
+            createdAt: commentData.createdAt.toDate() // Assuming createdAt is a Timestamp
+        };
+    }));
+
+    await handleCommentsSortBy("date", mediaCommentsMapped as UserComment[]);
+    setIsLoading(false);
+    return mediaCommentsMapped as UserComment[];
+}
+
 
     return (
         <div id={styles.container}>
