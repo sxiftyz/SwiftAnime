@@ -88,7 +88,7 @@ export default function CommentsSection({ mediaInfo, isOnWatchPage, episodeId, e
 
         const mediaCommentsMapped = mediaComments.docs.map(async (doc: QueryDocumentSnapshot) => {
             const commentData = doc.data();
-            const userDoc = await getDocs(doc(db, 'users', commentData.userId)); // Fetch user data
+            const userDoc = await getDoc(doc(db, 'users', commentData.userId)); // Fetch user data // Fetch user data
             const userData = userDoc.docs[0].data();
             return {
                 ...commentData,
